@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Lifetime Budget Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #F8F7F4; }
+        .nav-button { transition: all 0.3s ease; }
+        .nav-button.active { background-color: #4A5568; color: white; }
+        .nav-button:not(.active):hover { background-color: #E2E8F0; }
+        .chart-container { position: relative; width: 100%; max-width: 500px; margin-left: auto; margin-right: auto; height: 300px; max-height: 400px; }
+        @media (min-width: 768px) { .chart-container { height: 350px; } }
+        .section-fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .progress-bar-bg { background-color: #E2E8F0; }
+        .progress-bar-fill { transition: width 0.5s ease-in-out; }
+        /* Removed spinner styles as loading overlay is removed */
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <div id="app" class="container mx-auto p-4 md:p-6 lg:p-8 max-w-7xl">
+
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-700">Lifetime Budget Tracker</h1>
+            <p class="text-lg text-gray-500 mt-2">Your personal finance dashboard, simplified.</p>
+        </header>
+
+        <nav class="flex flex-wrap justify-center bg-white rounded-lg shadow p-2 mb-8 sticky top-4 z-10 backdrop-blur-sm bg-opacity-80">
+            <button id="nav-dashboard" class="nav-button active px-4 py-2 rounded-md font-semibold text-gray-600">📊 Dashboard</button>
+            <button id="nav-transactions" class="nav-button px-4 py-2 rounded-md font-semibold text-gray-600">💸 Transactions</button>
+            <button id="nav-budgets" class="nav-button px-4 py-2 rounded-md font-semibold text-gray-600">🎯 Budgets</button>
+            <button id="nav-categories" class="nav-button px-4 py-2 rounded-md font-semibold text-gray-600">📂 Categories</button>
+        </nav>
+
+        <main>
+            <section id="dashboard-section" class="section-fade-in">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold text-gray-700">Dashboard</h2>
+                    <select id="month-filter" class="bg-white border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-400">
+                    </select>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                    <div class="bg-white p-6 rounded-lg shadow text-center">
+                        <h3 class="text-lg font-semibold text-gray-500">Total Income</h3>
+                        <p id="kpi-income" class="text-4xl font-bold text-green-500 mt-2">₹0.00</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow text-center">
+                        <h3 class="text-lg font-semibold text-gray-500">Total Expenses</h3>
+                        <p id="kpi-expenses" class="text-4xl font-bold text-red-500 mt-2">₹0.00</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow text-center">
+                        <h3 class="text-lg font-semibold text-gray-500">Net Savings</h3>
+                        <p id="kpi-net" class="text-4xl font-bold text-gray-600 mt-2">₹0.00</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-xl font-semibold text-center mb-4">Spending by Category</h3>
+                        <div class="chart-container">
+                            <canvas id="spending-chart"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-xl font-semibold text-center mb-4">Income vs. Expenses Trend</h3>
+                        <div class="chart-container h-full">
+                            <canvas id="trends-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="transactions-section" class="hidden section-fade-in">
+                <h2 class="text-2xl font-bold text-gray-700 mb-4">Transactions</h2>
+                <div class="bg-white p-6 rounded-lg shadow mb-6">
+                    <h3 class="text-xl font-semibold mb-4">Add New Transaction</h3>
+                    <form id="add-transaction-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+                        <div class="w-full">
+                            <label for="trans-date" class="block text-sm font-medium text-gray-700">Date</label>
+                            <input type="date" id="trans-date" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-gray-500 focus:ring-gray-500" required>
+                        </div>
+                        <div class="w-full">
+                            <label for="trans-desc" class="block text-sm font-medium text-gray-700">Description</label>
+                            <input type="text" id="trans-desc" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-gray-500 focus:ring-gray-500" placeholder="e.g., Groceries" required>
+                        </div>
+                        <div class="w-full">
+                            <label for="trans-cat" class="block text-sm font-medium text-gray-700">Category</label>
+                            <select id="trans-cat" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-gray-500 focus:ring-gray-500" required></select>
+                        </div>
+                        <div class="w-full">
+                            <label for="trans-amount" class="block text-sm font-medium text-gray-700">Amount (₹)</label>
+                            <input type="number" id="trans-amount" step="0.01" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-gray-500 focus:ring-gray-500" placeholder="50.00" required>
+                        </div>
+                        <button type="submit" class="w-full bg-gray-700 text-white font-bold py-2 px-4 rounded-md hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">Add</button>
+                    </form>
+                </div>
+
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h3 class="text-xl font-semibold mb-4">Transaction History</h3>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="transaction-list" class="bg-white divide-y divide-gray-200">
+                                </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section id="budgets-section" class="hidden section-fade-in">
+                 <h2 class="text-2xl font-bold text-gray-700 mb-4">Budgets</h2>
+                 <div class="bg-white p-6 rounded-lg shadow mb-6">
+                    <h3 class="text-xl font-semibold mb-4">Set Monthly Budget</h3>
+                    <form id="add-budget-form" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                        <div>
+                            <label for="budget-cat" class="block text-sm font-medium text-gray-700">Category</label>
+                            <select id="budget-cat" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-gray-500 focus:ring-gray-500" required></select>
+                        </div>
+                        <div>
+                            <label for="budget-amount" class="block text-sm font-medium text-gray-700">Budgeted Amount (₹)</label>
+                            <input type="number" id="budget-amount" step="0.01" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-gray-500 focus:ring-gray-500" placeholder="500.00" required>
+                        </div>
+                        <button type="submit" class="w-full bg-gray-700 text-white font-bold py-2 px-4 rounded-md hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">Set Budget</button>
+                    </form>
+                </div>
+
+                <div id="budget-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  </div>
+            </section>
+            
+            <section id="categories-section" class="hidden section-fade-in">
+                <h2 class="text-2xl font-bold text-gray-700 mb-4">Categories</h2>
+                <div class="bg-white p-6 rounded-lg shadow mb-6">
+                    <h3 class="text-xl font-semibold mb-4">Add New Category</h3>
+                    <form id="add-category-form" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                        <div>
+                            <label for="cat-name" class="block text-sm font-medium text-gray-700">Category Name</label>
+                            <input type="text" id="cat-name" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-gray-500 focus:ring-gray-500" placeholder="e.g., Investments" required>
+                        </div>
+                        <div>
+                            <label for="cat-type" class="block text-sm font-medium text-gray-700">Type</label>
+                            <select id="cat-type" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-gray-500 focus:ring-gray-500" required>
+                                <option value="Expense">Expense</option>
+                                <option value="Income">Income</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="w-full bg-gray-700 text-white font-bold py-2 px-4 rounded-md hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">Add Category</button>
+                    </form>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-xl font-semibold mb-4">Income Categories</h3>
+                        <ul id="income-category-list" class="space-y-2">
+                           </ul>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-xl font-semibold mb-4">Expense Categories</h3>
+                        <ul id="expense-category-list" class="space-y-2">
+                           </ul>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const state = {
+                currentView: 'dashboard',
+                selectedMonth: '',
+                // Initial static data
+                categories: [
+                    { name: 'Salary', type: 'Income' },
+                    { name: 'Freelance', type: 'Income' },
+                    { name: 'Groceries', type: 'Expense' },
+                    { name: 'Rent', type: 'Expense' },
+                    { name: 'Utilities', type: 'Expense' },
+                    { name: 'Transportation', type: 'Expense' },
+                    { name: 'Entertainment', type: 'Expense' },
+                    { name: 'Dining Out', type: 'Expense' },
+                    { name: 'Health', type: 'Expense' }
+                ],
+                transactions: [
+                    { date: '2025-05-28', description: 'Monthly Salary', category: 'Salary', amount: 50000 },
+                    { date: '2025-05-29', description: 'Weekly Groceries', category: 'Groceries', amount: 3500 },
+                    { date: '2025-05-30', description: 'Coffee with friend', category: 'Dining Out', amount: 250 },
+                    { date: '2025-05-31', description: 'May Rent', category: 'Rent', amount: 15000 },
+                    { date: '2025-06-01', description: 'Freelance Project A', category: 'Freelance', amount: 10000 },
+                    { date: '2025-06-02', description: 'Bus fare', category: 'Transportation', amount: 120 },
+                    { date: '2025-06-03', description: 'Cinema ticket', category: 'Entertainment', amount: 400 }
+                ],
+                // Budgets are stored as { 'YYYY-MM': { 'Category1': amount, 'Category2': amount } }
+                budgets: {
+                    '2025-05': {
+                        'Groceries': 4000,
+                        'Rent': 15000,
+                        'Utilities': 2000,
+                        'Entertainment': 1000
+                    },
+                    '2025-06': {
+                        'Groceries': 4500,
+                        'Rent': 15000,
+                        'Utilities': 2200,
+                        'Entertainment': 1200
+                    }
+                } 
+            };
+
+            const currencyFormatter = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' });
+            let spendingChart, trendsChart;
+
+            // Function to generate a list of past months for the filter dropdown
+            const generatePastMonths = (count) => {
+                const months = [];
+                const now = new Date();
+                for (let i = 0; i < count; i++) {
+                    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                    const year = d.getFullYear();
+                    const month = (d.getMonth() + 1).toString().padStart(2, '0');
+                    months.push({ value: `${year}-${month}`, text: d.toLocaleString('default', { month: 'long', year: 'numeric' }) });
+                }
+                return months;
+            };
+
+            // Function to populate the month filter dropdown
+            const populateMonthFilter = () => {
+                const monthFilter = document.getElementById('month-filter');
+                monthFilter.innerHTML = ''; // Clear existing options
+                const months = generatePastMonths(12); // Generate last 12 months
+                months.forEach(month => {
+                    const option = document.createElement('option');
+                    option.value = month.value;
+                    option.textContent = month.text;
+                    monthFilter.appendChild(option);
+                });
+                // Set the initial selected month to the current month or the first option
+                state.selectedMonth = monthFilter.value;
+            };
+            
+            // Helper to get the type of a category (Income/Expense)
+            const getCategoryType = (categoryName) => {
+                const category = state.categories.find(c => c.name === categoryName);
+                return category ? category.type : 'Expense'; // Default to Expense if not found
+            };
+            
+            // Central rendering function, called after state updates or view changes
+            const renderAppContent = () => {
+                // Hide all sections and show the current one
+                document.querySelectorAll('main section').forEach(section => section.classList.add('hidden'));
+                const currentSection = document.getElementById(`${state.currentView}-section`);
+                if (currentSection) {
+                    currentSection.classList.remove('hidden');
+                }
+
+                // Update navigation button active state
+                document.querySelectorAll('nav button').forEach(button => button.classList.remove('active'));
+                const activeButton = document.getElementById(`nav-${state.currentView}`);
+                if (activeButton) {
+                    activeButton.classList.add('active');
+                }
+
+                // Render content based on the current view
+                switch (state.currentView) {
+                    case 'dashboard':
+                        renderDashboard();
+                        break;
+                    case 'transactions':
+                        renderTransactions();
+                        break;
+                    case 'budgets':
+                        renderBudgets();
+                        break;
+                    case 'categories':
+                        renderCategories();
+                        break;
+                }
+            };
+
+            // Renders the Dashboard section
+            const renderDashboard = () => {
+                // Filter transactions for the selected month
+                const transactionsForMonth = state.transactions.filter(t => t.date.startsWith(state.selectedMonth));
+                
+                // Calculate total income and expenses
+                const income = transactionsForMonth
+                    .filter(t => getCategoryType(t.category) === 'Income')
+                    .reduce((sum, t) => sum + t.amount, 0);
+
+                const expenses = transactionsForMonth
+                    .filter(t => getCategoryType(t.category) === 'Expense')
+                    .reduce((sum, t) => sum + t.amount, 0);
+
+                // Update Key Performance Indicators (KPIs)
+                document.getElementById('kpi-income').textContent = currencyFormatter.format(income);
+                document.getElementById('kpi-expenses').textContent = currencyFormatter.format(expenses);
+                document.getElementById('kpi-net').textContent = currencyFormatter.format(income - expenses);
+                
+                // Render charts
+                renderSpendingChart(transactionsForMonth);
+                renderTrendsChart();
+            };
+            
+            // Renders the Spending by Category (Doughnut) Chart
+            const renderSpendingChart = (transactions) => {
+                const ctx = document.getElementById('spending-chart').getContext('2d');
+                // Aggregate expense data by category
+                const expenseData = transactions
+                    .filter(t => getCategoryType(t.category) === 'Expense')
+                    .reduce((acc, t) => {
+                        acc[t.category] = (acc[t.category] || 0) + t.amount;
+                        return acc;
+                    }, {});
+
+                const labels = Object.keys(expenseData);
+                const data = Object.values(expenseData);
+
+                // Destroy existing chart instance before creating a new one
+                if (spendingChart) {
+                    spendingChart.destroy();
+                }
+
+                // Display a message if no expense data for the month
+                if (labels.length === 0) {
+                     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                     ctx.font = '16px Inter';
+                     ctx.fillStyle = 'grey';
+                     ctx.textAlign = 'center';
+                     ctx.fillText('No expense data for this month.', ctx.canvas.width / 2, ctx.canvas.height / 2);
+                     return;
+                }
+
+                spendingChart = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: data,
+                            // Tailwind-like color palette for the chart segments
+                            backgroundColor: ['#6EE7B7', '#FBBF24', '#F87171', '#60A5FA', '#A78BFA', '#F472B6', '#34D399'],
+                            borderColor: '#F8F7F4', // Matches body background for a seamless look
+                            borderWidth: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'bottom', labels: { font: { size: 12 } } }
+                        }
+                    }
+                });
+            };
+
+            // Renders the Income vs. Expenses Trend (Line) Chart
+            const renderTrendsChart = () => {
+                const ctx = document.getElementById('trends-chart').getContext('2d');
+                // Get data for the last 6 months to show a trend
+                const months = generatePastMonths(6).reverse(); // Reverse to show oldest first
+                const labels = months.map(m => m.text);
+                const incomeData = [];
+                const expenseData = [];
+
+                // Populate income and expense data for each month
+                months.forEach(month => {
+                    const transactionsForMonth = state.transactions.filter(t => t.date.startsWith(month.value));
+                    incomeData.push(transactionsForMonth.filter(t => getCategoryType(t.category) === 'Income').reduce((sum, t) => sum + t.amount, 0));
+                    expenseData.push(transactionsForMonth.filter(t => getCategoryType(t.category) === 'Expense').reduce((sum, t) => sum + t.amount, 0));
+                });
+                
+                // Destroy existing chart instance
+                if (trendsChart) {
+                    trendsChart.destroy();
+                }
+
+                trendsChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                label: 'Income',
+                                data: incomeData,
+                                borderColor: '#34D399', // Green
+                                backgroundColor: 'rgba(52, 211, 153, 0.2)', // Light green fill
+                                tension: 0.3, // Smooth lines
+                                fill: true,
+                            },
+                            {
+                                label: 'Expenses',
+                                data: expenseData,
+                                borderColor: '#F87171', // Red
+                                backgroundColor: 'rgba(248, 113, 113, 0.2)', // Light red fill
+                                tension: 0.3,
+                                fill: true,
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: { y: { beginAtZero: true } }, // Start Y-axis at zero
+                        plugins: { legend: { position: 'top' } }
+                    }
+                });
+            };
+            
+            // Renders the Transactions section (list of all transactions)
+            const renderTransactions = () => {
+                const list = document.getElementById('transaction-list');
+                list.innerHTML = ''; // Clear existing list items
+
+                // Sort transactions by date (most recent first)
+                const sortedTransactions = [...state.transactions].sort((a,b) => new Date(b.date) - new Date(a.date));
+
+                if (sortedTransactions.length === 0) {
+                    list.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-gray-500">No transactions yet. Add one above!</td></tr>`;
+                } else {
+                    sortedTransactions.forEach((t, index) => {
+                        const row = document.createElement('tr');
+                        const isIncome = getCategoryType(t.category) === 'Income';
+                        row.innerHTML = `
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${t.date}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${t.description}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${t.category}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-right font-semibold ${isIncome ? 'text-green-600' : 'text-red-600'}">
+                                ${isIncome ? '+' : '-'}${currencyFormatter.format(t.amount)}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <button class="delete-transaction-btn text-red-500 hover:text-red-700 font-bold py-1 px-2 rounded" data-transaction-index="${index}">
+                                    Delete
+                                </button>
+                            </td>
+                        `;
+                        list.appendChild(row);
+                    });
+                }
+                
+                // Populate the category dropdown for adding new transactions
+                populateCategoryDropdown('trans-cat');
+            };
+
+            // Renders the Budgets section (budget progress for categories)
+            const renderBudgets = () => {
+                const budgetList = document.getElementById('budget-list');
+                budgetList.innerHTML = ''; // Clear existing budget cards
+
+                // Get budgets and transactions for the currently selected month
+                const budgetsForMonth = state.budgets[state.selectedMonth] || {};
+                const transactionsForMonth = state.transactions.filter(t => t.date.startsWith(state.selectedMonth));
+
+                // Filter expense categories that have a budget set for this month
+                const expenseCategoriesWithBudgets = state.categories
+                    .filter(c => c.type === 'Expense' && budgetsForMonth[c.name] !== undefined)
+                    .sort((a,b) => a.name.localeCompare(b.name)); // Sort alphabetically
+
+                if (expenseCategoriesWithBudgets.length === 0) {
+                     budgetList.innerHTML = `<div class="col-span-full text-center p-8 bg-white rounded-lg shadow"><p class="text-gray-500">No budgets set for this month. Set one above!</p></div>`;
+                } else {
+                    expenseCategoriesWithBudgets.forEach(cat => {
+                        const budgeted = budgetsForMonth[cat.name] || 0;
+                        // Calculate amount spent for this category in the selected month
+                        const spent = transactionsForMonth
+                            .filter(t => t.category === cat.name)
+                            .reduce((sum, t) => sum + t.amount, 0);
+                        
+                        const remaining = budgeted - spent;
+                        // Calculate percentage spent, preventing division by zero
+                        const percentage = budgeted > 0 ? (spent / budgeted) * 100 : (spent > 0 ? 100 : 0);
+                        
+                        // Determine progress bar color based on spending percentage
+                        let progressColor;
+                        if (percentage > 100) {
+                            progressColor = 'bg-red-500'; // Over budget
+                        } else if (percentage > 75) {
+                            progressColor = 'bg-yellow-400'; // Nearing budget limit
+                        } else {
+                            progressColor = 'bg-green-500'; // Within budget
+                        }
+
+                        const card = document.createElement('div');
+                        card.className = 'bg-white p-6 rounded-lg shadow';
+                        card.innerHTML = `
+                            <h4 class="font-bold text-lg">${cat.name}</h4>
+                            <div class="flex justify-between items-baseline mt-2 mb-1 text-sm">
+                                <span class="font-semibold ${remaining < 0 ? 'text-red-500' : 'text-gray-600'}">Spent: ${currencyFormatter.format(spent)}</span>
+                                <span class="text-gray-500">Budget: ${currencyFormatter.format(budgeted)}</span>
+                            </div>
+                            <div class="w-full progress-bar-bg rounded-full h-2.5">
+                                <div class="progress-bar-fill ${progressColor} h-2.5 rounded-full" style="width: ${Math.min(percentage, 100)}%"></div>
+                            </div>
+                             <p class="text-right mt-1 text-xs font-semibold ${remaining < 0 ? 'text-red-600' : 'text-green-600'}">
+                                ${remaining >= 0 ? `${currencyFormatter.format(remaining)} left` : `${currencyFormatter.format(Math.abs(remaining))} over`}
+                            </p>
+                        `;
+                        budgetList.appendChild(card);
+                    });
+                }
+
+                // Populate the category dropdown for setting new budgets (only expense categories)
+                populateCategoryDropdown('budget-cat', 'Expense');
+            };
+
+            // Renders the Categories section (lists income and expense categories)
+            const renderCategories = () => {
+                const incomeList = document.getElementById('income-category-list');
+                const expenseList = document.getElementById('expense-category-list');
+                incomeList.innerHTML = '';
+                expenseList.innerHTML = '';
+
+                state.categories.forEach(cat => {
+                    const li = document.createElement('li');
+                    li.className = 'flex justify-between items-center bg-gray-50 p-3 rounded-md';
+                    li.innerHTML = `
+                        <span>${cat.name}</span>
+                        <button class="delete-category-btn text-red-500 hover:text-red-700 font-bold py-1 px-2 rounded" data-category-name="${cat.name}">
+                            Delete
+                        </button>
+                    `;
+                    if (cat.type === 'Income') {
+                        incomeList.appendChild(li);
+                    } else {
+                        expenseList.appendChild(li);
+                    }
+                });
+            };
+
+            // Populates a <select> dropdown with categories
+            const populateCategoryDropdown = (elementId, type = null) => {
+                const select = document.getElementById(elementId);
+                if (!select) return; // Exit if element not found
+                select.innerHTML = '<option value="">Select a category</option>'; // Default option
+                let categoriesToShow = state.categories;
+                if(type) {
+                    categoriesToShow = state.categories.filter(c => c.type === type);
+                }
+                categoriesToShow.sort((a,b) => a.name.localeCompare(b.name)).forEach(cat => {
+                    const option = document.createElement('option');
+                    option.value = cat.name;
+                    option.textContent = cat.name;
+                    select.appendChild(option);
+                });
+            };
+
+            // Event handler for navigation clicks
+            const handleNavClick = (e) => {
+                if (e.target.tagName === 'BUTTON') {
+                    const view = e.target.id.split('-')[1]; // Extract view name from button ID
+                    state.currentView = view;
+                    renderAppContent(); // Re-render the app content for the new view
+                }
+            };
+
+            // Event handler for adding a new transaction
+            const handleAddTransaction = (e) => {
+                e.preventDefault();
+                const date = document.getElementById('trans-date').value;
+                const description = document.getElementById('trans-desc').value;
+                const category = document.getElementById('trans-cat').value;
+                const amount = parseFloat(document.getElementById('trans-amount').value);
+                
+                if (date && description && category && amount > 0) {
+                    const newTransaction = { date, description, category, amount, timestamp: new Date() }; 
+                    state.transactions.push(newTransaction);
+                    e.target.reset(); // Clear the form
+                    document.getElementById('trans-date').value = new Date().toISOString().split('T')[0]; // Reset date to today
+                    renderAppContent(); // Re-render to show new transaction
+                } else {
+                    console.warn("Invalid transaction data.");
+                }
+            };
+            
+            // Event handler for setting a monthly budget
+            const handleAddBudget = (e) => {
+                e.preventDefault();
+                const category = document.getElementById('budget-cat').value;
+                const amount = parseFloat(document.getElementById('budget-amount').value);
+                
+                if (category && amount >= 0) {
+                    // Initialize month budget object if it doesn't exist
+                    if (!state.budgets[state.selectedMonth]) {
+                        state.budgets[state.selectedMonth] = {};
+                    }
+                    state.budgets[state.selectedMonth][category] = amount;
+                    e.target.reset(); // Clear the form
+                    renderAppContent(); // Re-render to show new budget
+                } else {
+                    console.warn("Invalid budget data.");
+                }
+            };
+
+            // Event handler for adding a new category
+            const handleAddCategory = (e) => {
+                e.preventDefault();
+                const name = document.getElementById('cat-name').value.trim();
+                const type = document.getElementById('cat-type').value;
+
+                if (name) {
+                    // Check for duplicate category names (case-insensitive)
+                    if (state.categories.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+                        console.warn('Category name must be unique.');
+                        return;
+                    }
+                    const newCategory = { name, type };
+                    state.categories.push(newCategory);
+                    e.target.reset(); // Clear the form
+                    renderAppContent(); // Re-render to show new category
+                } else {
+                    console.warn("Invalid category data.");
+                }
+            };
+
+            // Event handler for deleting a category
+            const handleDeleteCategory = (e) => {
+                if (e.target.classList.contains('delete-category-btn')) {
+                    const categoryToDelete = e.target.dataset.categoryName;
+                    
+                    // Filter out the category from the state.categories array
+                    state.categories = state.categories.filter(cat => cat.name !== categoryToDelete);
+
+                    // Optional: Handle transactions and budgets associated with the deleted category
+                    // For simplicity, we'll just remove them. In a real app, you might want to reassign.
+                    state.transactions = state.transactions.filter(t => t.category !== categoryToDelete);
+                    
+                    // Remove category from budgets for all months
+                    for (const month in state.budgets) {
+                        if (state.budgets[month][categoryToDelete]) {
+                            delete state.budgets[month][categoryToDelete];
+                        }
+                    }
+
+                    renderAppContent(); // Re-render to show updated categories, transactions, and budgets
+                }
+            };
+
+            // Event handler for deleting a transaction
+            const handleDeleteTransaction = (e) => {
+                if (e.target.classList.contains('delete-transaction-btn')) {
+                    const indexToDelete = parseInt(e.target.dataset.transactionIndex);
+                    
+                    if (!isNaN(indexToDelete) && indexToDelete >= 0 && indexToDelete < state.transactions.length) {
+                        // Remove the transaction from the array
+                        state.transactions.splice(indexToDelete, 1);
+                        renderAppContent(); // Re-render to show updated transactions
+                    }
+                }
+            };
+
+            // Event handler for changing the month filter dropdown
+            const handleMonthChange = (e) => {
+                state.selectedMonth = e.target.value;
+                // Re-render only the relevant sections for the new month
+                if(state.currentView === 'dashboard') renderDashboard();
+                if(state.currentView === 'budgets') renderBudgets();
+            };
+
+            // Initial setup on page load
+            populateMonthFilter();
+            document.getElementById('trans-date').value = new Date().toISOString().split('T')[0]; // Set default transaction date to today
+            renderAppContent(); // Initial render of the app content
+
+            // Attach event listeners to UI elements
+            document.querySelector('nav').addEventListener('click', handleNavClick);
+            document.getElementById('add-transaction-form').addEventListener('submit', handleAddTransaction);
+            document.getElementById('add-budget-form').addEventListener('submit', handleAddBudget);
+            document.getElementById('add-category-form').addEventListener('submit', handleAddCategory);
+            document.getElementById('month-filter').addEventListener('change', handleMonthChange);
+            // Attach event listener for deleting categories and transactions
+            document.getElementById('income-category-list').addEventListener('click', handleDeleteCategory);
+            document.getElementById('expense-category-list').addEventListener('click', handleDeleteCategory);
+            document.getElementById('transaction-list').addEventListener('click', handleDeleteTransaction);
+        });
+    </script>
+</body>
+</html>
